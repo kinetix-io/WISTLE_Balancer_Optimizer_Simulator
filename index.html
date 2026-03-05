@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WHISTLE: Strategic Line Optimizer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root { 
+            --lg-red: #a50034; --lg-dark: #212121; --white: #ffffff; --bg: #f4f7f9; 
+            --border: #e0e0e0; --success: #28a745; --danger: #dc3545; --accent: #ffca28; --cyan: #00bcd4; --bench-blue: #007bff;
+        }
+        body { font-family: -apple-system, system-ui, sans-serif; background-color: var(--bg); color: var(--lg-dark); margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Top Navigation */
+        .top-ribbon { background: var(--lg-red); color: white; padding: 10px 40px; display: flex; align-items: center; justify-content: space-between; z-index: 2000; flex-shrink: 0; }
+        .lg-logo { width: 35px; height: 35px; background: white; color: var(--lg-red); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; }
+        .app-title { font-size: 18px; font-weight: 800; letter-spacing: 1px; }
+
+        .tabs-nav { background: var(--lg-dark); padding: 0 40px; display: flex; flex-shrink: 0; z-index: 1005; }
+        .tab-btn { background: transparent; color: #888; border: none; padding: 14px 20px; cursor: pointer; font-weight: 700; text-transform: uppercase; border-bottom: 4px solid transparent; transition: 0.3s; font-size: 10px; }
+        .tab-btn.active { color: var(--white); border-bottom-color: var(--lg-red); background: rgba(255,255,255,0.05); }
+
+        /* Main Viewport */
+        .main-view { flex-grow: 1; overflow-y: auto; padding: 0 20px 20px 20px; scroll-behavior: smooth; }
+        .content-box { max-width: 1600px; margin: auto; padding-top: 20px; }
+
+        /* Dataset Statistics Grid (New) */
+        .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: #fff; padding: 15px; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+        .stat-card label { display: block; font-size: 9px; font-weight: 900; color: #888; text-transform: uppercase; margin-bottom: 5px; }
+        .stat-card span { font-size: 18px; font-weight: 800; color: var(--lg-dark); }
+
+        /* KPI Ribbon (Page 1) */
+        .black-ribbon { background: #1a1a1a; color: white; padding: 15px 30px; border-radius: 10px 10px 0 0; display: flex; justify-content: space-around; align-items: center; border-bottom: 2px solid var(--lg-red); }
+        .ribbon-stat { text-align: center; flex: 1; border-right: 1px solid #333; }
+        .ribbon-stat:last-child { border-right: none; }
+        .ribbon-stat label { display: block; font-size: 8px; text-transform: uppercase; color: #999; margin-bottom: 4px; }
+        .ribbon-stat span { font-size: 15px; font-weight: 800; }
+
+        /* Frozen Command Ribbon (Page 2) */
+        .control-row { background: #fff; border: 1px solid #dee2e6; padding: 15px 25px; border-radius: 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 20px; position: sticky; top: 0; z-index: 1001; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: -20px; }
+        .ctrl-item { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+        .ctrl-item label { font-size: 9px; font-weight: 900; color: #888; text-transform: uppercase; }
+        .eff-cell { text-align: center; padding: 0 25px; border-left: 2px solid #f0f0f0; min-width: 140px; }
+        .eff-val { font-size: 26px; font-weight: 900; color: var(--success); line-height: 1; }
+
+        .btn { border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 10px; text-transform: uppercase; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
+        .btn-opt { background: var(--lg-red); color: white; }
+        .btn-reset { background: #6c757d; color: white; }
+
+        /* Grid Layout & Cards */
+        .sim-layout { display: flex; gap: 20px; align-items: flex-start; margin-top: 10px; }
+        .sidebar { width: 240px; flex-shrink: 0; display: flex; flex-direction: column; gap: 15px; position: sticky; top: 105px; }
+        .sidebar-box { background: #fff; border: 1px solid #dee2e6; border-radius: 10px; overflow: hidden; }
+        .ws-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; flex-grow: 1; }
+        .ws-card { background: #fff; border: 1px solid #dee2e6; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .ws-head { padding: 10px 15px; color: white; font-weight: 800; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .task-row { border-bottom: 1px solid #f5f5f5; padding: 8px 0; display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+        .ws-footer { padding: 12px; background: #f8f9fa; border-top: 1px solid #eee; display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; }
+
+        .tab-content { display: none; } .tab-content.active { display: block; }
+        .log-window { background: #1a1a1a; color: #eee; font-family: 'Courier New', monospace; font-size: 9px; padding: 12px; height: 180px; overflow-y: auto; border-radius: 8px; }
+        .log-entry { margin-bottom: 5px; border-left: 2px solid var(--lg-red); padding-left: 10px; line-height: 1.4; }
+
+        select, input { padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-weight: 700; font-size: 11px; width: 100%; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; }
+        th { background: #f8f9fa; padding: 12px; color: #495057; text-transform: uppercase; font-size: 10px; border: 1px solid #e9ecef; font-weight: 800; }
+        td { padding: 12px; border: 1px solid #f1f3f5; }
+        .receipt { display: none; margin-top: 10px; padding: 6px 15px; border-radius: 20px; background: #e8f5e9; color: var(--success); font-size: 10px; font-weight: 800; align-items: center; gap: 6px; justify-content: center; }
+        .receipt.active { display: flex; }
+    </style>
+</head>
+<body>
+
+<div class="top-ribbon">
+    <div class="lg-logo">LG</div>
+    <div class="app-title">WHISTLE <span style="font-weight: 300; opacity: 0.8;">| Strategic Line Optimizer</span></div>
+</div>
+
+<nav class="tabs-nav">
+    <button class="tab-btn active" onclick="switchTab('analytics')">Performance Analytics</button>
+    <button class="tab-btn" onclick="switchTab('simulator')">Optimization Engine</button>
+</nav>
+
+<div class="main-view">
+    <div class="content-box">
+        
+        <div id="analytics" class="tab-content active">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
+                <div style="border: 2px dashed #ccc; padding: 25px; text-align: center; border-radius: 10px; cursor: pointer; background: #fafafa;" onclick="document.getElementById('fileAss').click()">
+                    <input type="file" id="fileAss" accept=".csv" style="display:none">
+                    <strong>1. UPLOAD PRODUCTION CSV</strong>
+                    <div id="receiptAss" class="receipt">✓ LOADED: <span id="nameAss"></span></div>
+                </div>
+                <div style="border: 2px dashed #ccc; padding: 25px; text-align: center; border-radius: 10px; cursor: pointer; background: #fafafa;" onclick="document.getElementById('fileMas').click()">
+                    <input type="file" id="fileMas" accept=".csv" style="display:none">
+                    <strong>2. UPLOAD MASTER ST CSV</strong>
+                    <div id="receiptMas" class="receipt">✓ LOADED: <span id="nameMas"></span></div>
+                </div>
+            </div>
+            
+            <div id="dashArea" style="display:none;">
+                <div class="stats-grid">
+                    <div class="stat-card"><label>Total Task Rows</label><span id="stat-tasks">0</span></div>
+                    <div class="stat-card"><label>Unique Tools</label><span id="stat-tools">0</span></div>
+                    <div class="stat-card"><label>Unique Models</label><span id="stat-models">0</span></div>
+                    <div class="stat-card"><label>Total Stations</label><span id="stat-stages">0</span></div>
+                    <div class="stat-card"><label>Total Work Content (Min)</label><span id="stat-wc">0.00</span></div>
+                    <div class="stat-card"><label>Total Manpower</label><span id="stat-mp">0.0</span></div>
+                </div>
+
+                <div class="black-ribbon">
+                    <div class="ribbon-stat"><label>Avg ST Takt (Min)</label><span id="ribbonAvgStMin" style="color:var(--accent)">0.0000</span></div>
+                    <div class="ribbon-stat"><label>Avg ST Takt (Sec)</label><span id="ribbonAvgStSec" style="color:var(--accent)">0.00</span></div>
+                    <div class="ribbon-stat"><label>Avg Actual Takt (Min)</label><span id="ribbonAvgActMin" style="color:var(--cyan)">0.0000</span></div>
+                    <div class="ribbon-stat"><label>Avg Actual Takt (Sec)</label><span id="ribbonAvgActSec" style="color:var(--cyan)">0.00</span></div>
+                </div>
+                <div style="background:white; border:1px solid #ddd; overflow:hidden; border-radius:0 0 10px 10px;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr><th>Model Name</th><th>Master ST</th><th>Actual MP</th><th>Act Takt (Min)</th><th>ST Takt (Min)</th></tr>
+                        </thead>
+                        <tbody id="modelBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="simulator" class="tab-content">
+            <div class="control-row">
+                <div class="ctrl-item"><label>Tool Selection</label><select id="selTool" onchange="updateModels()"></select></div>
+                <div class="ctrl-item"><label>Scenario Model</label><select id="selModel" onchange="initSim()"></select></div>
+                <div class="ctrl-item" style="max-width:130px;"><label>Global Benchmark (Min)</label><input type="number" step="0.0001" id="inpTakt" oninput="drawSim()"></div>
+                <div style="display:flex; gap:12px;">
+                    <button class="btn btn-opt" onclick="recursiveOptimize(10)">Auto-Optimize</button>
+                    <button class="btn btn-reset" onclick="resetSim()">Reset</button>
+                </div>
+                <div class="eff-cell"><label style="font-size:9px; font-weight:900; color:#888; text-transform:uppercase;">Line Efficiency</label><div class="eff-val" id="liveEff">0.00%</div></div>
+            </div>
+            
+            <div class="sim-layout">
+                <div class="sidebar">
+                    <div class="sidebar-box">
+                        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                            <thead><tr style="background:#f8f9fa;"><th style="width:35px;"><input type="checkbox" checked onclick="toggleAllStages(this.checked)"></th><th style="text-align:left;">Stage Filter</th></tr></thead>
+                            <tbody id="stageList"></tbody>
+                        </table>
+                    </div>
+                    <div class="sidebar-box" style="background:#1a1a1a;">
+                        <div style="padding:8px; color:#555; font-size:8px; font-weight:900; text-transform:uppercase; border-bottom:1px solid #333;">Balancing Trace Log</div>
+                        <div class="log-window" id="optLog">
+                            <div class="log-entry">Ready.</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="flex-grow:1;">
+                    <div style="height:320px; background:white; padding:15px; border:1px solid #ddd; border-radius:10px; margin-bottom:20px; box-shadow:0 2px 10px rgba(0,0,0,0.03);"><canvas id="simChart"></canvas></div>
+                    <div class="ws-grid" id="wsGrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let gRows = [], gMaster = {}, toolMap = {}, modelColMap = {}, mKeys = [];
+    let simData = [], simDataBackup = [], sChart = null;
+    let globalAvgStMin = 0, selStages = new Set();
+
+    function switchTab(id) {
+        document.querySelectorAll('.tab-content, .tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if(id === 'simulator' && gRows.length > 0) initSim();
+    }
+
+    async function handleFile(file, isMaster) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, {type: 'buffer'});
+        const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+        document.getElementById(isMaster ? 'receiptMas' : 'receiptAss').classList.add('active');
+        document.getElementById(isMaster ? 'nameMas' : 'nameAss').innerText = file.name;
+        if (isMaster) {
+            gMaster = {};
+            const h = data[0].map(x => (x||"").toString().toLowerCase());
+            const mIdx = h.findIndex(x => x.includes('model')), stIdx = h.findIndex(x => x.includes('st') || x.includes('takt'));
+            data.slice(1).forEach(r => { if(r[mIdx]) gMaster[r[mIdx].toString().trim().toUpperCase()] = parseFloat(r[stIdx]) || 0; });
+        } else { gRows = data; }
+        if(gRows.length > 0 && Object.keys(gMaster).length > 0) processAnalytics();
+    }
+
+    document.getElementById('fileAss').onchange = e => handleFile(e.target.files[0], false);
+    document.getElementById('fileMas').onchange = e => handleFile(e.target.files[0], true);
+
+    function processAnalytics() {
+        const rows = gRows; toolMap = {}; modelColMap = {}; mKeys = [];
+        let curT = "";
+        for (let j = 4; j < rows[0].length; j++) {
+            if (rows[0][j]) curT = rows[0][j].toString().trim().toUpperCase();
+            let modelName = (rows[1][j] || "").toString().trim();
+            if (modelName) {
+                if (!mKeys.includes(modelName)) mKeys.push(modelName);
+                if (!toolMap[curT]) toolMap[curT] = [];
+                if (!toolMap[curT].includes(modelName)) toolMap[curT].push(modelName);
+                modelColMap[modelName] = { mp: j, tt: j+1 };
+            }
+        }
+        const stages = new Set(); const tbody = document.getElementById('modelBody'); tbody.innerHTML = "";
+        let gMP = 0, gWC = 0, stMinList = [], totalWCSum = 0, totalMPSum = 0;
+        
+        mKeys.forEach(mId => {
+            const cols = modelColMap[mId];
+            let mMP = 0, mWC = 0;
+            for(let i=3; i<rows.length; i++){ if(rows[i][0]) stages.add(rows[i][0]); mMP += parseFloat(rows[i][cols.mp])||0; mWC += parseFloat(rows[i][cols.tt])||0; }
+            const gerp = gMaster[mId.toUpperCase()] || 0;
+            let actMin = mMP > 0 ? (mWC/mMP) : 0, stMin = mMP > 0 ? (gerp/mMP) : 0;
+            stMinList.push(stMin);
+            totalWCSum += mWC; totalMPSum += mMP;
+            tbody.innerHTML += `<tr><td>${mId}</td><td>${gerp.toFixed(4)}</td><td>${mMP.toFixed(1)}</td><td>${actMin.toFixed(4)}</td><td>${stMin.toFixed(4)}</td></tr>`;
+            gWC += mWC; gMP += mMP;
+        });
+        
+        // Dataset Statistics Display
+        document.getElementById('stat-tasks').innerText = rows.length - 3;
+        document.getElementById('stat-tools').innerText = Object.keys(toolMap).length;
+        document.getElementById('stat-models').innerText = mKeys.length;
+        document.getElementById('stat-stages').innerText = stages.size;
+        document.getElementById('stat-wc').innerText = totalWCSum.toFixed(2);
+        document.getElementById('stat-mp').innerText = totalMPSum.toFixed(1);
+
+        globalAvgStMin = stMinList.reduce((a,b)=>a+b,0)/(stMinList.length||1);
+        document.getElementById('ribbonAvgStMin').innerText = globalAvgStMin.toFixed(4);
+        document.getElementById('ribbonAvgStSec').innerText = (globalAvgStMin * 60).toFixed(2);
+        document.getElementById('ribbonAvgActMin').innerText = (gMP > 0 ? gWC/gMP : 0).toFixed(4);
+        document.getElementById('ribbonAvgActSec').innerText = (gMP > 0 ? (gWC/gMP)*60 : 0).toFixed(2);
+        document.getElementById('selTool').innerHTML = Object.keys(toolMap).map(t => `<option value="${t}">${t}</option>`).join('');
+        selStages = new Set(Array.from(stages).map(s => s.toString()));
+        updateModels();
+        document.getElementById('dashArea').style.display = 'block';
+    }
+
+    function updateModels() {
+        const tool = document.getElementById('selTool').value;
+        document.getElementById('selModel').innerHTML = (toolMap[tool] || []).map(m => `<option value="${m}">${m}</option>`).join('');
+        initSim();
+    }
+
+    function resetSim() { simData = JSON.parse(JSON.stringify(simDataBackup)); drawSim(); }
+
+    function toggleStage(id) { if(selStages.has(id.toString())) selStages.delete(id.toString()); else selStages.add(id.toString()); drawSim(); }
+    function toggleAllStages(c) { 
+        selStages = c ? new Set(simData.map(s => s.id.toString())) : new Set();
+        document.querySelectorAll('#stageList input').forEach(i => i.checked = c);
+        drawSim(); 
+    }
+
+    function initSim() {
+        const activeModel = document.getElementById('selModel').value;
+        const cols = modelColMap[activeModel];
+        if(!activeModel || !cols) return;
+        simData = []; let cur = null;
+        for (let i = 3; i < gRows.length; i++) {
+            const r = gRows[i]; if (!r[3] && !r[0]) continue;
+            if (r[0]) { if (cur) simData.push(cur); cur = { id: r[0], name: r[2]||"Stage", mp: parseFloat(r[cols.mp])||0, micros: [] }; }
+            if (cur) cur.micros.push({ name: r[3], wc: parseFloat(r[cols.tt])||0 });
+        }
+        if (cur) simData.push(cur);
+        simDataBackup = JSON.parse(JSON.stringify(simData));
+        document.getElementById('stageList').innerHTML = simData.map(s => `<tr><td style="padding:8px;"><input type="checkbox" checked data-id="${s.id}" onchange="toggleStage('${s.id}')"></td><td style="padding:8px; text-align:left;">S${s.id}: ${s.name}</td></tr>`).join('');
+        document.getElementById('inpTakt').value = globalAvgStMin.toFixed(4);
+        drawSim();
+    }
+
+    function getEff() {
+        const target = parseFloat(document.getElementById('inpTakt').value) || 0.0001;
+        let sumRatios = 0, visibleCount = 0;
+        simData.forEach(s => { if(selStages.has(s.id.toString()) && s.mp > 0) { sumRatios += ((s.micros.reduce((a,b)=>a+b.wc,0)/s.mp)/target); visibleCount++; } });
+        return (visibleCount > 0 ? (sumRatios/visibleCount*100) : 0);
+    }
+
+    function drawSim() {
+        const grid = document.getElementById('wsGrid'); grid.innerHTML = "";
+        let labels = [], data = [];
+        const target = parseFloat(document.getElementById('inpTakt').value) || 0.0001;
+        simData.forEach((s, sI) => {
+            if(!selStages.has(s.id.toString())) return;
+            const takt = s.mp > 0 ? (s.micros.reduce((a, b) => a + b.wc, 0) / s.mp) : 0;
+            labels.push(`S${s.id}`); data.push(takt);
+            grid.innerHTML += `<div class="ws-card"><div class="ws-head" style="background:${takt <= target ? 'var(--success)' : 'var(--danger)'}">S${s.id}: ${s.name} <span>${takt.toFixed(4)}</span></div>
+                <div style="padding:8px; flex-grow:1; max-height:220px; overflow-y:auto;">${s.micros.map((m, mI) => `<div class="task-row"><span>${m.name}</span><div style="display:flex;gap:4px;"><strong>${m.wc.toFixed(4)}</strong><button class="arrow-btn" onclick="shuf(${sI},${mI},-1)">←</button><button class="arrow-btn" onclick="shuf(${sI},${mI},1)">→</button></div></div>`).join('')}</div>
+                <div class="ws-footer">MP: ${s.mp} <div><button class="arrow-btn" style="display:inline-flex;" onclick="upMP(${sI},-1)">-</button> <button class="arrow-btn" style="display:inline-flex;" onclick="upMP(${sI},1)">+</button></div></div></div>`;
+        });
+        const eff = getEff();
+        document.getElementById('liveEff').innerText = (isNaN(eff) ? "0.00" : eff.toFixed(2)) + "%";
+        if (sChart) sChart.destroy();
+        sChart = new Chart(document.getElementById('simChart').getContext('2d'), {
+            type: 'bar', data: { labels, datasets: [{ data, backgroundColor: data.map(v => v > target ? '#dc3545' : '#28a745') }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, annotation: { annotations: { t: { type: 'line', yMin: target, yMax: target, borderColor: '#007bff', borderWidth: 3 } } } } }
+        });
+    }
+
+    function shuf(sI, mI, dir) { const tI = sI + dir; if(tI < 0 || tI >= simData.length) return; const [task] = simData[sI].micros.splice(mI, 1); simData[tI].micros.push(task); drawSim(); }
+    function upMP(idx, delta) { simData[idx].mp = Math.max(1, simData[idx].mp + delta); drawSim(); }
+
+    function recursiveOptimize(steps) {
+        const log = document.getElementById('optLog');
+        if (steps === 10) log.innerHTML = "";
+        if (steps <= 0) { log.innerHTML += `<div class="log-entry" style="border-left-color:var(--success)">Done. Eff: ${getEff().toFixed(2)}%</div>`; log.scrollTop = log.scrollHeight; drawSim(); return; }
+        const target = parseFloat(document.getElementById('inpTakt').value);
+        let startEff = getEff(), maxBreach = 0, targetIdx = -1;
+        simData.forEach((s, idx) => {
+            if(!selStages.has(s.id.toString()) || s.mp === 0) return;
+            let takt = s.micros.reduce((a,b)=>a+b.wc,0)/s.mp;
+            if (takt - target > maxBreach) { maxBreach = takt - target; targetIdx = idx; }
+        });
+        if (targetIdx === -1) { log.innerHTML += `<div class="log-entry" style="border-left-color:var(--success)">Target Met.</div>`; drawSim(); return; }
+        let currentS = simData[targetIdx], adjacents = [targetIdx - 1, targetIdx + 1].filter(n => n >= 0 && n < simData.length && selStages.has(simData[n].id.toString())), moveFound = false;
+        for (let nIdx of adjacents) {
+            let neighborS = simData[nIdx], tasks = [...currentS.micros].sort((a,b) => a.wc - b.wc);
+            for (let t of tasks) {
+                let curT = currentS.micros.reduce((a,b)=>a+b.wc,0)/currentS.mp, nNextT = (neighborS.micros.reduce((a,b)=>a+b.wc,0) + t.wc)/neighborS.mp;
+                let curBreach = Math.max(0, curT - target) + Math.max(0, (neighborS.micros.reduce((a,b)=>a+b.wc,0)/neighborS.mp) - target);
+                let nextBreach = Math.max(0, (currentS.micros.reduce((a,b)=>a+b.wc,0)-t.wc)/currentS.mp - target) + Math.max(0, nNextT - target);
+                if (nextBreach < curBreach || nNextT <= target) {
+                    neighborS.micros.push(currentS.micros.splice(currentS.micros.indexOf(t), 1)[0]);
+                    log.innerHTML += `<div class="log-entry">S${currentS.id} → S${neighborS.id}. Eff: ${startEff.toFixed(2)}% → ${getEff().toFixed(2)}%</div>`;
+                    moveFound = true; break;
+                }
+            }
+            if (moveFound) break;
+        }
+        if (!moveFound) log.innerHTML += `<div class="log-entry">S${currentS.id}: No optimization found.</div>`;
+        log.scrollTop = log.scrollHeight; setTimeout(() => recursiveOptimize(steps - 1), 50);
+    }
+</script>
+</body>
+</html>
